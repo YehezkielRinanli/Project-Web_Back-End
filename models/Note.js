@@ -1,6 +1,5 @@
 import { DataTypes } from 'sequelize';
-import db from '../database.js';
-import Folder from './Folder.js';
+import db from '../config/database.js';
 
 const Note = db.define('Note', {
     title: { type: DataTypes.STRING, allowNull: false },
@@ -10,11 +9,7 @@ const Note = db.define('Note', {
     status: { type: DataTypes.STRING, defaultValue: 'pending' },
     folderId: {
         type: DataTypes.INTEGER,
-        references: {
-            model: Folder,
-            key: 'id'
-        },
-        allowNull: true
+        allowNull: true 
     },
     userId: {
         type: DataTypes.INTEGER,
@@ -24,8 +19,5 @@ const Note = db.define('Note', {
     tableName: 'notes',
     timestamps: true
 });
-
-Note.belongsTo(Folder, { foreignKey: 'folderId', as: 'folder' });
-Folder.hasMany(Note, { foreignKey: 'folderId', as: 'notes' });
 
 export default Note;

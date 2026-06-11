@@ -1,7 +1,5 @@
 import { Sequelize } from "sequelize";
-import db from "../database.js";
-import Note from "./Note.js";
-import Folder from "./Folder.js";
+import db from "../config/database.js";
 
 const { DataTypes } = Sequelize;
 
@@ -23,10 +21,5 @@ const User = db.define('users', {
     freezeTableName: true
 });
 
-User.hasMany(Note, { foreignKey: 'userId', as: 'notes' });
-Note.belongsTo(User, { foreignKey: 'userId', as: 'user' });
-
-User.hasMany(Folder, { foreignKey: 'userId', as: 'folders' });
-Folder.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
 export default User;
