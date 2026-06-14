@@ -52,7 +52,7 @@ User.hasMany(Tag, { foreignKey: 'userId' });
 
 Activity.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(Activity, { foreignKey: 'userId' });
-db.sync({ alter: true })
+db.sync({ force: true })
     .then(() => {
         console.log("Database berhasil disinkronkan!");
         app.listen(3000, () => console.log("Server berjalan di port 3000"));
