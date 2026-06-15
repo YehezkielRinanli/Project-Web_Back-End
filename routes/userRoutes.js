@@ -2,9 +2,14 @@ import express from "express";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { getAllUsers, resetCollabLimit } from '../controllers/userController.js'; 
+import { verifyToken, verifyAdmin } from '../middleware/auth.js';
 
 const router = express.Router();
 const JWT_SECRET = "RAHASIA_MEMOORA_2026";
+
+router.get('/', verifyToken, verifyAdmin, getAllUsers);
+router.put('/:id/reset-collab', verifyToken, verifyAdmin, resetCollabLimit);
 
 router.post('/register', async (req, res) => {
     try {
@@ -49,7 +54,7 @@ router.post('/login', async (req, res) => {
         }
 
         const token = jwt.sign(
-            { id: user.id, username: user.username },
+            { id: user.id, username: user.username, role: user.role }, 
             JWT_SECRET,
             { expiresIn: '1d' }
         );
@@ -58,18 +63,22 @@ router.post('/login', async (req, res) => {
             success: true, 
             message: "Login berhasil!",
             token,
-            user: { id: user.id, username: user.username, email: user.email }
+            user: { id: user.id, username: user.username, email: user.email, role: user.role }
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-router.put('/profile', async (req, res) => {
+router.put('/profile', verifyToken, async (req, res) => {
     try {
         const { id, username, email, password } = req.body;
-        const user = await User.findByPk(id);
+        
+        if (req.user.id !== parseInt(id) && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: "Akses ditolak!" });
+        }
 
+        const user = await User.findByPk(id);
         if (!user) {
             return res.status(404).json({ success: false, message: "User tidak ditemukan!" });
         }
@@ -86,15 +95,19 @@ router.put('/profile', async (req, res) => {
         res.json({ 
             success: true, 
             message: "Profil berhasil diperbarui!",
-            user: { id: user.id, username: user.username, email: user.email }
+            user: { id: user.id, username: user.username, email: user.email, role: user.role }
         });
     } catch (error) {
         res.status(500).json({ success: false, message: error.message });
     }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', verifyToken, async (req, res) => {
     try {
+        if (req.user.id !== parseInt(req.params.id) && req.user.role !== 'admin') {
+            return res.status(403).json({ success: false, message: "Akses ditolak!" });
+        }
+
         const user = await User.findByPk(req.params.id);
         if (!user) {
             return res.status(404).json({ success: false, message: "User tidak ditemukan!" });

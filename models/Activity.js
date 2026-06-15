@@ -1,5 +1,5 @@
 import { DataTypes } from 'sequelize';
-import db from '../database.js';
+import db from '../config/database.js';
 
 const Activity = db.define('Activity', {
     action: { type: DataTypes.STRING, allowNull: false },

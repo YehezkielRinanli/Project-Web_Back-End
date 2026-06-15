@@ -1,5 +1,5 @@
 import { Sequelize } from "sequelize";
-import db from "../database.js";
+import db from "../config/database.js";
 
 const { DataTypes } = Sequelize;
 

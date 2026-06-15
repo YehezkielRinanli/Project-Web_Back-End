@@ -1,17 +1,23 @@
 import express from "express";
-import noteRoutes from './routes/notesRoutes.js'; //aulia
-import folderRoutes from './routes/folderRoutes.js'; //fadil
-import collaborationRoutes from "./routes/collaborationRoutes.js"; //kasih
-import userRoutes from './routes/userRoutes.js'; //yehezkiel
-import db from "./database.js";
-import Note from "./models/Note.js"; //aulia
-import User from "./models/User.js"; //yehezkiel
-import tagRoutes from './routes/tagRoutes.js'; //aulia
-import activityRoutes from './routes/activityRoutes.js'; //aulia
-import Tag from "./models/Tag.js"; 
-import Activity from "./models/Activity.js";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
+
+import noteRoutes from './routes/notesRoutes.js'; // Aulia
+import folderRoutes from './routes/folderRoutes.js'; // Fadil
+import collaborationRoutes from "./routes/collaborationRoutes.js"; // Kasih
+import userRoutes from './routes/userRoutes.js'; // Yehezkiel
+import tagRoutes from './routes/tagRoutes.js'; // Aulia
+import activityRoutes from './routes/activityRoutes.js'; // Aulia
+import bulletinRoutes from './routes/bulletinRoutes.js'; // Aulia
+
+import db from "./config/database.js";
+import User from "./models/User.js"; 
+import Note from "./models/Note.js"; 
+import Folder from "./models/Folder.js"; 
+import Tag from "./models/Tag.js"; 
+import Activity from "./models/Activity.js";
+import Bulletin from "./models/Bulletin.js";
+
 import { verifyToken } from "./middleware/auth.js";
 
 const app = express();
@@ -19,24 +25,34 @@ const app = express();
 const __fileName = fileURLToPath(import.meta.url);
 const __dirname = dirname(__fileName);
 
-app.use(express.static(join(__dirname, "public")));
+User.hasMany(Note, { foreignKey: 'userId', as: 'notes' });
+Note.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
+User.hasMany(Folder, { foreignKey: 'userId', as: 'folders' });
+Folder.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+Folder.hasMany(Note, { foreignKey: 'folderId', as: 'folderNotes' }); 
+Note.belongsTo(Folder, { foreignKey: 'folderId', as: 'folder' });
+
+User.hasMany(Tag, { foreignKey: 'userId', as: 'tags' });
+Tag.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+User.hasMany(Activity, { foreignKey: 'userId', as: 'activities' });
+Activity.belongsTo(User, { foreignKey: 'userId', as: 'user' });
+
+
+app.use(express.static(join(__dirname, "public")));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use('/api/notes', verifyToken, noteRoutes); //aulia
-app.use('/api/folders', verifyToken, folderRoutes); //fadil
-app.use("/api/collabs", verifyToken, collaborationRoutes); //kasih
-app.use('/api/users', userRoutes); //yehezkiel
-app.use('/api/tags', tagRoutes); //aulia
-app.use('/api/activities', activityRoutes); //aulia
+app.use('/api/users', userRoutes); // Yehezkiel
 
-try {
-    await db.authenticate();
-    console.log("Database MySQL terhubung!");
-} catch (error) {
-    console.error("Gagal menghubungkan database:", error);
-}
+app.use('/api/notes', verifyToken, noteRoutes); // Aulia
+app.use('/api/folders', verifyToken, folderRoutes); // Fadil
+app.use("/api/collabs", verifyToken, collaborationRoutes); // Kasih
+app.use('/api/tags', verifyToken, tagRoutes); // Aulia 
+app.use('/api/activities', verifyToken, activityRoutes); // Aulia 
+app.use('/api/bulletins', verifyToken, bulletinRoutes); // Aulia
 
 app.get("/", (req, res) => {
     const index = join(__dirname, "public", "index.html");
@@ -44,18 +60,24 @@ app.get("/", (req, res) => {
 });
 
 app.get('/api/status', (req, res) => {
-    res.json({ message: "Server API To-Do List berjalan dengan baik!" });
+    res.json({ message: "Server API Memoora berjalan dengan baik!" });
 });
 
+<<<<<<< HEAD
 Tag.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(Tag, { foreignKey: 'userId' });
 
 Activity.belongsTo(User, { foreignKey: 'userId' });
 User.hasMany(Activity, { foreignKey: 'userId' });
 db.sync({ force: true })
+=======
+db.sync({ alter: true })
+>>>>>>> 14556464cf1655d4643f514d784fc989a4115813
     .then(() => {
-        console.log("Database berhasil disinkronkan!");
-        app.listen(3000, () => console.log("Server berjalan di port 3000"));
+        console.log("Database MySQL berhasil disinkronkan!");
+        app.listen(3000, () => {
+            console.log("Server Memoora berjalan di http://localhost:3000");
+        });
     })
     .catch((error) => {
         console.error("Gagal sinkronisasi database:", error);
