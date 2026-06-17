@@ -40,6 +40,7 @@ let allFolders = [];
 let allCollabs = []; 
 let allTags = [];
 let allActivities = [];
+let allBulletins = [];
 
 let currentView = 'notes';
 let editingNoteId = null;
@@ -99,6 +100,12 @@ function setActiveNav(activeElement) {
         else if (currentView === 'tags') { mainAddBtn.textContent = 'Tag Baru'; mainAddBtn.style.display = 'block'; }
         else if (currentView === 'activities') { mainAddBtn.style.display = 'none'; }
     }
+
+    // Widget Papan Pengumuman hanya tampil di halaman Dashboard (notes)
+    const bulletinWidget = document.getElementById('bulletinWidget');
+    if (bulletinWidget) {
+        bulletinWidget.style.display = (currentView === 'notes') ? 'block' : 'none';
+    }
 }
 
 async function logActivity(actionName, descriptionText) {
@@ -120,6 +127,7 @@ navNotes.addEventListener('click', (e) => {
     searchInput.placeholder = 'Cari catatan...';
     notesContainer.innerHTML = '<div class="col-12 text-center text-secondary mt-5">Memuat catatan...</div>';
     fetchNotes();
+    fetchBulletins();
 });
 
 navFolders.addEventListener('click', (e) => {
@@ -226,6 +234,90 @@ function renderFoldersTemplate(folders) {
                 </div>
             </div>`;
         notesContainer.appendChild(card);
+    });
+}
+
+async function fetchBulletins() {
+    const bulletinList = document.getElementById('bulletinList');
+    try {
+        const response = await fetch('/api/bulletins?limit=5', { headers: { 'Authorization': `Bearer ${token}` } });
+        const result = await response.json();
+
+        if (result.success) {
+            allBulletins = result.data;
+            renderBulletins(allBulletins);
+        } else if (bulletinList) {
+            bulletinList.innerHTML = `<div class="text-center text-secondary py-3">Belum ada pengumuman.</div>`;
+        }
+    } catch (error) {
+        console.error(error);
+        if (bulletinList) {
+            bulletinList.innerHTML = `<div class="text-center text-secondary py-3">Gagal memuat pengumuman.</div>`;
+        }
+    }
+}
+
+function formatBulletinDate(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    return date.toLocaleString('id-ID', {
+        day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+}
+
+function renderBulletins(bulletins) {
+    const bulletinList = document.getElementById('bulletinList');
+    if (!bulletinList) return;
+
+    if (!bulletins || bulletins.length === 0) {
+        bulletinList.innerHTML = `<div class="text-center text-secondary py-3">📭 Belum ada pengumuman dari Admin.</div>`;
+        return;
+    }
+
+    bulletinList.innerHTML = '';
+    bulletins.forEach(bulletin => {
+        const authorName = bulletin.author && bulletin.author.username ? bulletin.author.username : 'Admin';
+        const content = bulletin.content || '';
+        const preview = content.length > 140 ? content.substring(0, 140) + '...' : content;
+
+        const item = document.createElement('div');
+        item.className = 'p-3 rounded bulletin-item';
+        item.style.borderLeft = '4px solid #c64d31';
+        item.style.backgroundColor = 'rgba(198, 77, 49, 0.05)';
+        item.style.cursor = 'pointer';
+        item.setAttribute('data-id', bulletin.id);
+
+        item.innerHTML = `
+            <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+                <h6 class="text-light fw-bold mb-1">${bulletin.title}</h6>
+                <small class="text-secondary text-nowrap">${formatBulletinDate(bulletin.createdAt)}</small>
+            </div>
+            <p class="text-secondary mb-1" style="font-size: 0.9rem;">${preview}</p>
+            <small class="text-gold fw-bold">— ${authorName} &middot; Baca selengkapnya</small>
+        `;
+
+        item.addEventListener('click', () => openBulletinModal(bulletin));
+        bulletinList.appendChild(item);
+    });
+}
+
+function openBulletinModal(bulletin) {
+    const modal = document.getElementById('bulletinModal');
+    if (!modal) return;
+
+    const authorName = bulletin.author && bulletin.author.username ? bulletin.author.username : 'Admin';
+
+    document.getElementById('bulletinModalTitle').textContent = bulletin.title;
+    document.getElementById('bulletinModalMeta').textContent = `Diposting oleh ${authorName} • ${formatBulletinDate(bulletin.createdAt)}`;
+    document.getElementById('bulletinModalContent').textContent = bulletin.content || '';
+
+    modal.style.display = 'flex';
+}
+
+const closeBulletinModalBtn = document.getElementById('closeBulletinModalBtn');
+if (closeBulletinModalBtn) {
+    closeBulletinModalBtn.addEventListener('click', () => {
+        document.getElementById('bulletinModal').style.display = 'none';
     });
 }
 
@@ -749,6 +841,7 @@ async function startApp() {
     await fetchNotes();   
     await fetchCollabs();
     await fetchTags();
+    await fetchBulletins();
 }
 
 document.getElementById('menu-toggle').addEventListener('click', function(e) {

@@ -40,6 +40,9 @@ Tag.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 User.hasMany(Activity, { foreignKey: 'userId', as: 'activities' });
 Activity.belongsTo(User, { foreignKey: 'userId', as: 'user' });
 
+User.hasMany(Bulletin, { foreignKey: 'author_id', as: 'bulletins' });
+Bulletin.belongsTo(User, { foreignKey: 'author_id', as: 'author' });
+
 
 app.use(express.static(join(__dirname, "public")));
 app.use(express.json());
@@ -63,16 +66,7 @@ app.get('/api/status', (req, res) => {
     res.json({ message: "Server API Memoora berjalan dengan baik!" });
 });
 
-<<<<<<< HEAD
-Tag.belongsTo(User, { foreignKey: 'userId' });
-User.hasMany(Tag, { foreignKey: 'userId' });
-
-Activity.belongsTo(User, { foreignKey: 'userId' });
-User.hasMany(Activity, { foreignKey: 'userId' });
-db.sync({ force: true })
-=======
 db.sync({ alter: true })
->>>>>>> 14556464cf1655d4643f514d784fc989a4115813
     .then(() => {
         console.log("Database MySQL berhasil disinkronkan!");
         app.listen(3000, () => {
