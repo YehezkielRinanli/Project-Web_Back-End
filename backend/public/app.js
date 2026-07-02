@@ -2,11 +2,27 @@ const token = localStorage.getItem('token');
 const user = JSON.parse(localStorage.getItem('user'));
 
 if (!token || !user) {
-    window.location.href = 'login.html';
+    window.location.href = '/login';
 } else {
-    const initials = user.username.charAt(0).toUpperCase();
-    document.getElementById('userAvatar').textContent = initials;
+    const avatarEl = document.getElementById('userAvatar');
+    if (user.avatarUrl) {
+        avatarEl.innerHTML = `<img src="/${user.avatarUrl.replace(/\\/g, '/')}" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+    } else {
+        avatarEl.textContent = user.username.charAt(0).toUpperCase();
+    }
 }
+
+function renderUserAvatarBaru(userData) {
+    const avatarEl = document.getElementById('userAvatar');
+    document.getElementById('topbarName').textContent = userData.username;
+    
+    if (userData.avatarUrl) {
+        avatarEl.innerHTML = `<img src="/${userData.avatarUrl.replace(/\\/g, '/')}" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+    } else {
+        avatarEl.textContent = userData.username.charAt(0).toUpperCase();
+    }
+}
+if (user) renderUserAvatarBaru(user);
 
 const notesContainer = document.getElementById('notesContainer');
 const searchInput = document.getElementById('searchInput');
@@ -17,15 +33,30 @@ const navFolders = document.getElementById('navFolders');
 const navCollabs = document.getElementById('navCollabs'); 
 const navTags = document.getElementById('navTags');
 const navActivities = document.getElementById('navActivities');
-const navAdmin = document.getElementById('navAdmin');
+const navAdminDashboard = document.getElementById('navAdminDashboard');
+const navUserControl = document.getElementById('navUserControl');
+const navBulletin = document.getElementById('navBulletin');
 
-if (navAdmin) {
-    if (user && user.role === 'admin') {
-        navAdmin.style.display = 'block';
-    } else {
-        navAdmin.style.display = 'none';
-    }
-}
+navAdminDashboard.addEventListener('click', (e) => {
+    e.preventDefault();
+    currentView = 'admin_dashboard';
+    setActiveNav(navAdminDashboard);
+    renderAdminDashboard();
+});
+
+navUserControl.addEventListener('click', (e) => {
+    e.preventDefault();
+    currentView = 'user_control';
+    setActiveNav(navUserControl);
+    fetchAdminData();
+});
+
+navBulletin.addEventListener('click', (e) => {
+    e.preventDefault();
+    currentView = 'bulletin_management';
+    setActiveNav(navBulletin);
+    fetchAdminData();
+});
 
 const noteModal = document.getElementById('noteModal');
 const noteForm = document.getElementById('noteForm');
@@ -53,6 +84,8 @@ let allFolders = [];
 let allCollabs = []; 
 let allTags = [];
 let allActivities = [];
+let allUsers = [];
+let allBulletins = [];
 
 let currentView = 'notes';
 let editingNoteId = null;
@@ -67,7 +100,7 @@ let noteTotalPages = 1;
 function showToast(message, type = 'success') {
     const toast = document.createElement('div');
     toast.className = `memoora-toast toast-${type}`;
-    toast.innerHTML = type === 'success' ? `✅ ${message}` : `❌ ${message}`;
+    toast.innerHTML = type === 'success' ? `${message}` : `${message}`;
     document.body.appendChild(toast);
     
     setTimeout(() => toast.classList.add('show'), 10);
@@ -94,9 +127,11 @@ function setActiveNav(activeElement) {
         if (pagContainer) pagContainer.innerHTML = '';
     }
 
+    const isUserAdmin = user && user.role === 'admin';
     const statusFilter = document.getElementById('statusFilter');
+    
     if (statusFilter) {
-        if (currentView === 'notes') {
+        if (currentView === 'notes' && !isUserAdmin) {
             statusFilter.classList.remove('d-none');
             statusFilter.classList.add('d-md-block');
         } else {
@@ -107,24 +142,27 @@ function setActiveNav(activeElement) {
 
     const mainAddBtn = document.getElementById('addNoteBtn');
     if (mainAddBtn) {
-        if (currentView === 'notes') { mainAddBtn.textContent = 'Catatan Baru'; mainAddBtn.style.display = 'block'; }
-        else if (currentView === 'folders') { mainAddBtn.textContent = 'Folder Baru'; mainAddBtn.style.display = 'block'; }
-        else if (currentView === 'collabs') { mainAddBtn.textContent = 'Undang Teman'; mainAddBtn.style.display = 'block'; }
-        else if (currentView === 'tags') { mainAddBtn.textContent = 'Tag Baru'; mainAddBtn.style.display = 'block'; }
-        else if (currentView === 'activities') { mainAddBtn.style.display = 'none'; }
-        else if (currentView === 'admin') { mainAddBtn.textContent = 'Buletin Baru'; mainAddBtn.style.display = 'block'; }
+        if (isUserAdmin) {
+            if (currentView === 'bulletin_management') { mainAddBtn.textContent = 'Buletin Baru'; mainAddBtn.style.display = 'block'; }
+            else { mainAddBtn.style.display = 'none'; }
+        } else {
+            if (currentView === 'notes') { mainAddBtn.textContent = 'Catatan Baru'; mainAddBtn.style.display = 'block'; }
+            else if (currentView === 'folders') { mainAddBtn.textContent = 'Folder Baru'; mainAddBtn.style.display = 'block'; }
+            else if (currentView === 'collabs') { mainAddBtn.textContent = 'Undang Teman'; mainAddBtn.style.display = 'block'; }
+            else if (currentView === 'tags') { mainAddBtn.textContent = 'Tag Baru'; mainAddBtn.style.display = 'block'; }
+            else if (currentView === 'activities') { mainAddBtn.style.display = 'none'; }
+        }
     }
 
-    // Widget Papan Pengumuman hanya tampil di halaman Dashboard (notes)
     const bulletinWidget = document.getElementById('bulletinWidget');
     if (bulletinWidget) {
-        bulletinWidget.style.display = (currentView === 'notes') ? 'block' : 'none';
+        bulletinWidget.style.display = (currentView === 'notes' && !isUserAdmin) ? 'block' : 'none';
     }
 }
 
 async function logActivity(actionName, descriptionText) {
     try {
-        await fetch('/api/activities', {
+        await fetch('http://localhost:3000/api/activities', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({ action: actionName, description: descriptionText })
@@ -141,7 +179,7 @@ navNotes.addEventListener('click', (e) => {
     searchInput.placeholder = 'Cari catatan...';
     notesContainer.innerHTML = '<div class="col-12 text-center text-secondary mt-5">Memuat catatan...</div>';
     fetchNotes();
-    fetchBulletins();
+    fetchBulletinWidget();
 });
 
 navFolders.addEventListener('click', (e) => {
@@ -184,17 +222,6 @@ if (navActivities) {
     });
 }
 
-if (navAdmin) {
-    navAdmin.addEventListener('click', (e) => {
-        e.preventDefault();
-        currentView = 'admin';
-        setActiveNav(navAdmin);
-        searchInput.placeholder = 'Cari user / buletin...';
-        notesContainer.innerHTML = '<div class="col-12 text-center text-secondary mt-5">Memuat Admin Panel...</div>';
-        fetchAdminData();
-    });
-}
-
 function jalankanFilter() {
     const kataKunci = searchInput.value.toLowerCase();
     if (currentView === 'notes') {
@@ -211,19 +238,21 @@ function jalankanFilter() {
     } else if (currentView === 'activities') {
         const dataTersaring = allActivities.filter(act => act.action.toLowerCase().includes(kataKunci) || (act.description && act.description.toLowerCase().includes(kataKunci)));
         renderActivities(dataTersaring);
-    } else if (currentView === 'admin') {
-        const usersTersaring = allUsers.filter(u => u.username.toLowerCase().includes(kataKunci) || u.email.toLowerCase().includes(kataKunci));
+    } else if (currentView === 'user_control') {
+        const usersTersaring = allUsers.filter(u => u.username.toLowerCase().includes(kataKunci));
+        renderUserControl(usersTersaring);
+    } else if (currentView === 'bulletin_management') {
         const bulletinsTersaring = allBulletins.filter(b => b.title.toLowerCase().includes(kataKunci));
-        renderAdminPanel(usersTersaring, bulletinsTersaring);
+        renderBulletinManagement(bulletinsTersaring);
     }
 }
 
 searchInput.addEventListener('input', jalankanFilter);
-statusFilter.addEventListener('change', jalankanFilter);
+if(statusFilter) statusFilter.addEventListener('change', jalankanFilter);
 
 async function fetchFolders() {
     try {
-        const response = await fetch('/api/folders', { headers: { 'Authorization': `Bearer ${token}` } });
+        const response = await fetch('http://localhost:3000/api/folders', { headers: { 'Authorization': `Bearer ${token}` } });
         const result = await response.json();
         if (result.success) {
             allFolders = result.data;
@@ -236,6 +265,7 @@ async function fetchFolders() {
 }
 
 function updateFolderDropdown() {
+    if(!noteFolderDropdown) return;
     noteFolderDropdown.innerHTML = '<option value="">Pilih Folder (Opsional)</option>';
     allFolders.forEach(folder => {
         noteFolderDropdown.innerHTML += `<option value="${folder.id}">${folder.name}</option>`;
@@ -269,7 +299,7 @@ function renderFoldersTemplate(folders) {
 async function fetchBulletins() {
     const bulletinList = document.getElementById('bulletinList');
     try {
-        const response = await fetch('/api/bulletins?limit=5', { headers: { 'Authorization': `Bearer ${token}` } });
+        const response = await fetch('http://localhost:3000/api/bulletins?limit=5', { headers: { 'Authorization': `Bearer ${token}` } });
         const result = await response.json();
 
         if (result.success) {
@@ -352,14 +382,14 @@ if (closeBulletinModalBtn) {
 
 async function fetchNotes(page = 1) {
     try {
-        const status = statusFilter.value;
-        const search = searchInput.value;
+        const status = statusFilter ? statusFilter.value : 'all';
+        const search = searchInput ? searchInput.value : '';
         let query = `?page=${page}&limit=6`;
         
         if (status && status !== 'all') query += `&status=${status}`;
         if (search) query += `&search=${search}`;
 
-        const response = await fetch(`/api/notes${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
+        const response = await fetch(`http://localhost:3000/api/notes${query}`, { headers: { 'Authorization': `Bearer ${token}` } });
         const result = await response.json();
         
         if (result.success) {
@@ -412,13 +442,14 @@ function renderNotesTemplate(data) {
             let tagText = 'NO TAG';
 
             if (note.tag && note.tag !== '') {
-                tagText = note.tag.toUpperCase();
-                const matchingTag = allTags.find(t => t.name.toLowerCase() === note.tag.toLowerCase());
+                const matchingTag = allTags.find(t => t.id.toString() === note.tag.toString() || t.name.toLowerCase() === note.tag.toLowerCase());
                 
                 if (matchingTag) {
+                    tagText = matchingTag.name.toUpperCase();
                     tagColor = matchingTag.color;
                     tagBg = matchingTag.color + '20'; 
                 } else {
+                    tagText = note.tag.toUpperCase();
                     tagColor = '#f39c12'; 
                     tagBg = 'rgba(243, 156, 18, 0.1)';
                 }
@@ -427,13 +458,18 @@ function renderNotesTemplate(data) {
             const folderTerkait = allFolders.find(f => f.id === note.folderId);
             const namaFolderRender = folderTerkait ? `📁 ${folderTerkait.name}` : 'Tanpa Folder';
 
+            let lampiranHtml = '';
+            if (note.lampiran) {
+                lampiranHtml = `<a href="/${note.lampiran.replace(/\\/g, '/')}" target="_blank" class="badge bg-info text-dark text-decoration-none mt-2" style="font-size: 0.8rem; padding: 5px 10px;">📎 Lihat Lampiran</a>`;
+            }
+
             const noteCard = document.createElement('div');
             noteCard.className = 'col-md-4 col-sm-6 mb-4';
             
             noteCard.innerHTML = `
                 <div class="card h-100 bg-dark border-secondary shadow-sm">
                     <div class="card-body d-flex flex-column">
-                        <div class="d-flex justify-content-between align-items-start mb-3">
+                        <div class="d-flex justify-content-between align-items-start mb-3 flex-wrap gap-3">
                             <div class="d-flex gap-2 align-items-center">
                                 <input class="form-check-input note-check fs-5 mt-0" type="checkbox" data-id="${note.id}" ${isChecked}>
                                 <h5 class="card-title mb-0 ${titleStyle} fw-bold">${note.title}</h5>
@@ -445,7 +481,11 @@ function renderNotesTemplate(data) {
                                 <button class="btn btn-sm btn-outline-danger delete-btn fw-bold" data-id="${note.id}">Hapus</button>
                             </div>
                         </div>
+                        
                         <p class="card-text text-secondary flex-grow-1">${note.description || ''}</p>
+                        
+                        ${lampiranHtml}
+                        
                         <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top border-secondary">
                             <span class="badge" style="background-color: ${tagBg}; color: ${tagColor}; border: 1px solid ${tagColor};">${tagText}</span>
                             <small class="text-gold fw-bold">${namaFolderRender}</small>
@@ -459,7 +499,7 @@ function renderNotesTemplate(data) {
 
 async function fetchCollabs() {
     try {
-        const response = await fetch('/api/collabs', { headers: { 'Authorization': `Bearer ${token}` } }); 
+        const response = await fetch('http://localhost:3000/api/collabs', { headers: { 'Authorization': `Bearer ${token}` } }); 
         const result = await response.json();
         if (result.success) {
             allCollabs = result.data;
@@ -499,7 +539,7 @@ function renderCollabsTemplate(collabs) {
 
 async function fetchTags() {
     try {
-        const res = await fetch('/api/tags', { headers: { 'Authorization': `Bearer ${token}` } });
+        const res = await fetch('http://localhost:3000/api/tags', { headers: { 'Authorization': `Bearer ${token}` } });
         const result = await res.json();
         if (result.success) { 
             allTags = result.data; 
@@ -509,16 +549,6 @@ async function fetchTags() {
     } catch (error) { 
         console.error(error); 
     }
-}
-
-function updateTagDropdown() {
-    const noteTagDropdown = document.getElementById('noteTag');
-    if (!noteTagDropdown) return;
-    
-    noteTagDropdown.innerHTML = '<option value="">Tanpa Tag (Opsional)</option>';
-    allTags.forEach(tag => {
-        noteTagDropdown.innerHTML += `<option value="${tag.name}">${tag.name}</option>`;
-    });
 }
 
 function renderTags(tags) {
@@ -542,9 +572,20 @@ function renderTags(tags) {
     });
 }
 
+function updateTagDropdown() {
+    const noteTagSelect = document.getElementById('noteTag');
+    if (!noteTagSelect) return;
+    
+    noteTagSelect.innerHTML = '<option value="">No Tag</option>';
+    
+    allTags.forEach(tag => {
+        noteTagSelect.innerHTML += `<option value="${tag.id}" style="color: ${tag.color}; font-weight: bold;">${tag.name}</option>`;
+    });
+}
+
 async function fetchActivities() {
     try {
-        const res = await fetch('/api/activities', { headers: { 'Authorization': `Bearer ${token}` } });
+        const res = await fetch('http://localhost:3000/api/activities', { headers: { 'Authorization': `Bearer ${token}` } });
         const result = await res.json();
         if (result.success) { 
             allActivities = result.data; 
@@ -579,12 +620,11 @@ function renderActivities(activities) {
     notesContainer.innerHTML = html;
 }
 
-
 async function fetchAdminData() {
     try {
         const [usersRes, bulletinsRes] = await Promise.all([
-            fetch('/api/users', { headers: { 'Authorization': `Bearer ${token}` } }),
-            fetch('/api/bulletins', { headers: { 'Authorization': `Bearer ${token}` } })
+            fetch('http://localhost:3000/api/users', { headers: { 'Authorization': `Bearer ${token}` } }),
+            fetch('http://localhost:3000/api/bulletins', { headers: { 'Authorization': `Bearer ${token}` } })
         ]);
         const usersResult = await usersRes.json();
         const bulletinsResult = await bulletinsRes.json();
@@ -592,7 +632,8 @@ async function fetchAdminData() {
         if (usersResult.success) allUsers = usersResult.data;
         if (bulletinsResult.success) allBulletins = bulletinsResult.data;
 
-        if (currentView === 'admin') renderAdminPanel(allUsers, allBulletins);
+        if (currentView === 'user_control') renderUserControl(allUsers);
+        if (currentView === 'bulletin_management') renderBulletinManagement(allBulletins);
     } catch (error) {
         console.error(error);
         if (currentView === 'admin') {
@@ -601,99 +642,81 @@ async function fetchAdminData() {
     }
 }
 
-function renderAdminPanel(users, bulletins) {
-    if (currentView !== 'admin') return;
-    notesContainer.innerHTML = '';
+function renderAdminDashboard() {
+    notesContainer.innerHTML = `
+        <div class="col-12 text-center mt-5">
+            <h1 class="text-gold fw-bold">Halo, Admin!</h1>
+            <p class="text-light">Selamat datang di Panel Admin.</p>
+        </div>`;
+}
 
+function renderUserControl(users) {
+    if (currentView !== 'user_control') return;
+    
     let html = `
-        <div class="col-12 mb-5">
-            <h4 class="text-gold fw-bold mb-3">👥 Manajemen User</h4>
+        <div class="col-12">
+            <h4 class="text-gold fw-bold mb-4">Manajemen User</h4>
             <div class="table-responsive">
-                <table class="table table-dark table-hover align-middle border border-secondary rounded">
-                    <thead>
-                        <tr class="text-gold">
+                <table class="table table-dark table-hover table-bordered border-secondary align-middle">
+                    <thead class="table-active">
+                        <tr class="text-gold text-center">
+                            <th>ID</th>
                             <th>Username</th>
                             <th>Email</th>
                             <th>Role</th>
-                            <th>Limit Edit Kolaborasi</th>
-                            <th class="text-end">Aksi</th>
+                            <th>Limit Kolab Terpakai</th>
+                            <th>Aksi</th>
                         </tr>
                     </thead>
-                    <tbody>`;
-
+                    <tbody>
+    `;
+    
     if (users.length === 0) {
-        html += `<tr><td colspan="5" class="text-center text-secondary py-4">Tidak ada user ditemukan.</td></tr>`;
+        html += `<tr><td colspan="6" class="text-center text-secondary py-4">Tidak ada data user.</td></tr>`;
     } else {
         users.forEach(u => {
-            const roleBadge = u.role === 'admin'
-                ? '<span class="badge bg-warning text-dark fw-bold">ADMIN</span>'
-                : '<span class="badge bg-secondary">USER</span>';
-            const limitCount = u.collab_edit_count ?? 0;
+            const isAdmin = u.role === 'admin';
+            const roleBadge = isAdmin ? '<span class="badge bg-danger">Admin</span>' : '<span class="badge bg-primary">User</span>';
+            
+            const limitText = isAdmin ? '<span class="text-secondary fw-bold">-</span>' : `${u.collab_edit_count} / 3`;
+            
+            const disableBtn = (isAdmin || u.collab_edit_count === 0) ? 'disabled' : '';
+            const btnStyle = isAdmin ? 'btn-outline-secondary' : 'btn-outline-warning';
+            
+            const resetAlert = u.reset_request ? '<span class="badge bg-warning text-dark ms-2 shadow-sm">Minta Reset⚠️</span>' : '';
+            
             html += `
-                <tr>
-                    <td class="fw-bold text-light">${u.username}</td>
-                    <td class="text-secondary">${u.email}</td>
+                <tr class="text-center">
+                    <td class="text-secondary">${u.id}</td>
+                    <td class="text-light fw-bold text-start">${u.username} ${resetAlert}</td>
+                    <td class="text-light">${u.email}</td>
                     <td>${roleBadge}</td>
-                    <td>${limitCount} / 3</td>
-                    <td class="text-end">
-                        <button class="btn btn-sm btn-outline-warning fw-bold reset-collab-btn" data-id="${u.id}" data-username="${u.username}" ${limitCount <= 0 ? 'disabled' : ''}>
+                    <td class="text-light">${limitText}</td>
+                    <td>
+                        <button class="btn btn-sm ${btnStyle} fw-bold reset-collab-btn" 
+                                data-id="${u.id}" data-username="${u.username}" ${disableBtn}>
                             Reset Limit
                         </button>
                     </td>
-                </tr>`;
+                </tr>
+            `;
         });
     }
-
-    html += `
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="col-12">
-            <h4 class="text-gold fw-bold mb-3">📰 Manajemen Buletin</h4>
-            <div class="row g-3" id="adminBulletinList">`;
-
-    if (bulletins.length === 0) {
-        html += `<div class="col-12 text-center text-secondary py-4">Belum ada buletin. Klik "Buletin Baru" untuk membuat.</div>`;
-    } else {
-        bulletins.forEach(b => {
-            const date = b.createdAt ? new Date(b.createdAt).toLocaleString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-            html += `
-                <div class="col-md-6 col-lg-4">
-                    <div class="card h-100 bg-dark border-secondary shadow-sm">
-                        <div class="card-body d-flex flex-column">
-                            <h5 class="card-title text-gold fw-bold">${b.title}</h5>
-                            <p class="card-text text-secondary flex-grow-1" style="white-space: pre-wrap;">${b.content}</p>
-                            <small class="text-secondary mb-2">${date}</small>
-                            <div class="d-flex gap-2 mt-2">
-                                <button class="btn btn-sm btn-outline-warning fw-bold edit-bulletin-btn" data-id="${b.id}" data-title="${b.title.replace(/"/g, '&quot;')}" data-content="${b.content.replace(/"/g, '&quot;')}">Edit</button>
-                                <button class="btn btn-sm btn-outline-danger fw-bold delete-bulletin-btn" data-id="${b.id}">Hapus</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>`;
-        });
-    }
-
-    html += `
-            </div>
-        </div>`;
-
+    
+    html += `</tbody></table></div></div>`;
     notesContainer.innerHTML = html;
 }
-
 
 async function fetchBulletinWidget() {
     const widget = document.getElementById('bulletinWidget');
     if (!widget) return;
     try {
-        const res = await fetch('/api/bulletins', { headers: { 'Authorization': `Bearer ${token}` } });
+        const res = await fetch('http://localhost:3000/api/bulletins', { headers: { 'Authorization': `Bearer ${token}` } });
         const result = await res.json();
         if (result.success && result.data.length > 0) {
             const latest = result.data.slice(0, 3);
             let html = `<div class="card bg-dark border-secondary shadow-sm mb-2"><div class="card-body">
-                <h5 class="text-gold fw-bold mb-3">📢 Pengumuman Terbaru</h5>`;
+                <h5 class="text-gold fw-bold mb-3">📢Pengumuman Terbaru</h5>`;
             latest.forEach(b => {
                 const date = b.createdAt ? new Date(b.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
                 html += `
@@ -716,45 +739,110 @@ async function fetchBulletinWidget() {
     }
 }
 
-noteForm.addEventListener('submit', async (e) => {
+function renderBulletinManagement(bulletins) {
+    if (currentView !== 'bulletin_management') return;
+    
+    notesContainer.innerHTML = '<div class="col-12 mb-3"><h4 class="text-gold fw-bold">Manajemen Buletin</h4></div>';
+    
+    if (bulletins.length === 0) {
+        notesContainer.innerHTML += `<div class="col-12 text-center text-secondary py-5">Belum ada buletin yang diterbitkan.</div>`;
+    } else {
+        bulletins.forEach(b => {
+            const date = new Date(b.createdAt).toLocaleString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const authorName = b.author && b.author.username ? b.author.username : 'Admin';
+            
+            const card = document.createElement('div');
+            card.className = 'col-md-6 mb-4';
+            card.innerHTML = `
+                <div class="card bg-dark border-secondary shadow-sm h-100">
+                    <div class="card-body d-flex flex-column">
+                        <div class="d-flex justify-content-between align-items-start mb-1">
+                            <h5 class="card-title text-gold fw-bold mb-0">${b.title}</h5>
+                        </div>
+                        <small class="text-secondary mb-3">Oleh: <span class="text-light">${authorName}</span> &middot; ${date}</small>
+                        <p class="card-text text-light flex-grow-1" style="white-space: pre-wrap; font-size: 0.95rem;">${b.content}</p>
+                        
+                        <div class="mt-3 pt-3 border-top border-secondary d-flex justify-content-end gap-2">
+                            <button class="btn btn-sm btn-outline-warning edit-bulletin-btn fw-bold" 
+                                    data-id="${b.id}" data-title="${b.title}" data-content="${b.content}">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-bulletin-btn fw-bold" 
+                                    data-id="${b.id}">
+                                Hapus
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            notesContainer.appendChild(card);
+        });
+    }
+}
+
+if(noteForm) noteForm.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const data = { title: document.getElementById('noteTitle').value, description: document.getElementById('noteDesc').value, dueDate: document.getElementById('noteDate').value, tag: document.getElementById('noteTag').value, folderId: document.getElementById('noteFolder').value || null };
+    
+    const formData = new FormData();
+    formData.append('title', document.getElementById('noteTitle').value);
+    formData.append('description', document.getElementById('noteDesc').value);
+    formData.append('dueDate', document.getElementById('noteDate').value);
+    formData.append('tag', document.getElementById('noteTag').value);
+    
+    const folderId = document.getElementById('noteFolder').value;
+    if (folderId) formData.append('folderId', folderId);
+    
+    const fileLampiran = document.getElementById('noteLampiran').files[0];
+    if (fileLampiran) formData.append('lampiran', fileLampiran);
+
     try {
         const isEditing = editingNoteId !== null;
         const url = isEditing ? `/api/notes/${editingNoteId}` : '/api/notes';
         const method = isEditing ? 'PUT' : 'POST';
-        await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(data) });
         
-        noteModal.style.display = 'none'; noteForm.reset(); editingNoteId = null; fetchNotes(); showToast("Catatan tersimpan!");
-        logActivity(isEditing ? 'Update Catatan' : 'Buat Catatan', `Judul: ${data.title}`);
+        const response = await fetch(url, { 
+            method, 
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData 
+        });
+        
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            noteModal.style.display = 'none'; 
+            noteForm.reset(); 
+            editingNoteId = null; 
+            fetchNotes(); 
+            showToast("Catatan berhasil disimpan!", "success");
+            logActivity(isEditing ? 'Update Catatan' : 'Buat Catatan', `Judul: ${formData.get('title')}`);
+        } else {
+            showToast(result.message || "Gagal menyimpan catatan", "error");
+        }
     } catch (error) { 
         console.error(error); 
+        showToast("Terjadi kesalahan pada server", "error");
     }
 });
 
-folderForm.addEventListener('submit', async (e) => {
+if(folderForm) folderForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = document.getElementById('folderName').value;
     try {
         const isEditing = editingFolderId !== null;
-        const url = isEditing ? `/api/folders/${editingFolderId}` : '/api/folders';
+        const url = isEditing ? `http://localhost:3000/api/folders/${editingFolderId}` : `http://localhost:3000/api/folders`;
         const method = isEditing ? 'PUT' : 'POST';
         await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ name }) });
         
         folderModal.style.display = 'none'; folderForm.reset(); editingFolderId = null; fetchFolders(); fetchNotes(); showToast("Folder tersimpan!");
         logActivity(isEditing ? 'Update Folder' : 'Buat Folder', `Nama Folder: ${name}`); 
-    } catch (error) { 
-        console.error(error); 
-    }
+    } catch (error) { console.error(error); }
 });
 
-collabForm.addEventListener('submit', async (e) => {
+if(collabForm) collabForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const data = { email: document.getElementById('collabEmail').value, role: document.getElementById('collabRole').value };
     try {
         const isEditing = editingCollabId !== null;
-        const url = isEditing ? `/api/collabs/${editingCollabId}` : '/api/collabs';
-        const method = isEditing ? 'PUT' : 'POST';
+        const url = isEditing ? `http://localhost:3000/api/collabs/${editingCollabId}` : `http://localhost:3000/api/collabs`;        const method = isEditing ? 'PUT' : 'POST';
         const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(data) });
         const result = await response.json();
         
@@ -762,30 +850,22 @@ collabForm.addEventListener('submit', async (e) => {
             showToast(isEditing ? "Role berhasil diperbarui!" : "Berhasil mengundang kolaborator!", "success");
             collabModal.style.display = 'none'; collabForm.reset(); document.getElementById('collabEmail').readOnly = false; editingCollabId = null; fetchCollabs(); 
             logActivity(isEditing ? 'Update Kolaborator' : 'Undang Kolaborator', `Akses untuk: ${data.email} (${data.role})`);
-        } else { 
-            showToast(result.message, "error"); 
-        }
-    } catch (error) { 
-        showToast("Terjadi kesalahan koneksi ke server.", "error"); 
-    }
+        } else { showToast(result.message, "error"); }
+    } catch (error) { showToast("Terjadi kesalahan koneksi ke server.", "error"); }
 });
 
-if(tagForm) {
-    tagForm.addEventListener('submit', async (e) => {
+if(tagForm) tagForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         const data = { name: document.getElementById('tagName').value, color: document.getElementById('tagColor').value };
         const isEditing = editingTagId !== null;
-        const url = isEditing ? `/api/tags/${editingTagId}` : '/api/tags';
+        const url = isEditing ? `http://localhost:3000/api/tags/${editingTagId}` : '/api/tags';
         const method = isEditing ? 'PUT' : 'POST';
         try {
             await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(data) });
             tagModal.style.display = 'none'; tagForm.reset(); fetchTags(); showToast("Tag berhasil disimpan!", "success");
             logActivity(isEditing ? 'Update Tag' : 'Buat Tag', `Nama Tag: ${data.name}`);
-        } catch (error) { 
-            showToast("Gagal menyimpan tag", "error"); 
-        }
-    });
-}
+        } catch (error) { showToast("Gagal menyimpan tag", "error"); }
+});
 
 if (bulletinForm) {
     bulletinForm.addEventListener('submit', async (e) => {
@@ -793,7 +873,7 @@ if (bulletinForm) {
         const data = { title: document.getElementById('bulletinTitle').value, content: document.getElementById('bulletinContent').value };
         try {
             const isEditing = editingBulletinId !== null;
-            const url = isEditing ? `/api/bulletins/${editingBulletinId}` : '/api/bulletins';
+            const url = isEditing ? `http://localhost:3000/api/bulletins/${editingBulletinId}` : '/api/bulletins';
             const method = isEditing ? 'PUT' : 'POST';
             const response = await fetch(url, { method, headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify(data) });
             const result = await response.json();
@@ -815,23 +895,23 @@ if (bulletinForm) {
     });
 }
 
-cancelNoteBtn.addEventListener('click', () => { noteModal.style.display = 'none'; noteForm.reset(); editingNoteId = null; });
-cancelFolderBtn.addEventListener('click', () => { folderModal.style.display = 'none'; folderForm.reset(); editingFolderId = null; });
-cancelCollabBtn.addEventListener('click', () => { collabModal.style.display = 'none'; collabForm.reset(); document.getElementById('collabEmail').readOnly = false; editingCollabId = null; });
+if(cancelNoteBtn) cancelNoteBtn.addEventListener('click', () => { noteModal.style.display = 'none'; noteForm.reset(); editingNoteId = null; });
+if(cancelFolderBtn) cancelFolderBtn.addEventListener('click', () => { folderModal.style.display = 'none'; folderForm.reset(); editingFolderId = null; });
+if(cancelCollabBtn) cancelCollabBtn.addEventListener('click', () => { collabModal.style.display = 'none'; collabForm.reset(); document.getElementById('collabEmail').readOnly = false; editingCollabId = null; });
 if(cancelTagBtn) cancelTagBtn.addEventListener('click', () => { tagModal.style.display = 'none'; tagForm.reset(); });
 if(cancelBulletinBtn) cancelBulletinBtn.addEventListener('click', () => { bulletinModal.style.display = 'none'; bulletinForm.reset(); editingBulletinId = null; });
 
 notesContainer.addEventListener('click', async (e) => {
     if (e.target.classList.contains('delete-btn')) {
         if (confirm("Hapus catatan ini?")) { 
-            await fetch(`/api/notes/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
+            await fetch(`http://localhost:3000/api/notes/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
             fetchNotes(); 
             logActivity('Hapus Catatan', 'Sebuah catatan telah dihapus');
         }
     }
     if (e.target.classList.contains('note-check')) {
         const statusBaru = e.target.checked ? 'completed' : 'pending';
-        await fetch(`/api/notes/${e.target.getAttribute('data-id')}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ status: statusBaru }) });
+        await fetch(`http://localhost:3000/api/notes/${e.target.getAttribute('data-id')}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ status: statusBaru }) });
         fetchNotes();
         logActivity('Ubah Status Catatan', `Status diubah menjadi: ${statusBaru}`);
     }
@@ -848,7 +928,7 @@ notesContainer.addEventListener('click', async (e) => {
 
     if (e.target.classList.contains('delete-folder-btn')) {
         if (confirm("Hapus folder ini?")) {
-            await fetch(`/api/folders/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
+            await fetch(`http://localhost:3000/api/folders/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
             fetchFolders(); 
             fetchNotes(); 
             showToast('Folder berhasil dihapus', 'success');
@@ -871,7 +951,6 @@ notesContainer.addEventListener('click', async (e) => {
         emailInput.readOnly = true;
         
         document.getElementById('collabRole').value = e.target.getAttribute('data-role'); 
-        
         document.querySelector('#collabModal h4').textContent = "Edit Role Kolaborator"; 
         
         const submitBtn = document.querySelector('#collabForm button[type="submit"]');
@@ -881,14 +960,14 @@ notesContainer.addEventListener('click', async (e) => {
     }
     if (e.target.classList.contains('delete-collab-btn')) {
         if (confirm("Cabut akses kolaborator ini?")) { 
-            await fetch(`/api/collabs/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
+            await fetch(`http://localhost:3000/api/collabs/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
             fetchCollabs(); 
             logActivity('Cabut Akses', 'Akses kolaborator dicabut'); 
         }
     }
     if (e.target.classList.contains('delete-tag-btn')) {
         if (confirm("Yakin ingin menghapus Tag ini?")) { 
-            await fetch(`/api/tags/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
+            await fetch(`http://localhost:3000/api/tags/${e.target.getAttribute('data-id')}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } }); 
             fetchTags(); 
             logActivity('Hapus Tag', 'Sebuah tag dihapus');
         }
@@ -904,7 +983,7 @@ notesContainer.addEventListener('click', async (e) => {
     if (e.target.classList.contains('delete-activity-btn')) {
         if (confirm("Hapus riwayat aktivitas ini?")) {
             try {
-                await fetch(`/api/activities/${e.target.getAttribute('data-id')}`, { 
+                await fetch(`http://localhost:3000/api/activities/${e.target.getAttribute('data-id')}`, { 
                     method: 'DELETE', 
                     headers: { 'Authorization': `Bearer ${token}` } 
                 });
@@ -921,7 +1000,7 @@ notesContainer.addEventListener('click', async (e) => {
         const username = e.target.getAttribute('data-username');
         if (await showCustomConfirm('Reset Limit', `Reset limit edit kolaborasi untuk user "${username}" menjadi 0?`)) {
             try {
-                const response = await fetch(`/api/users/${userId}/reset-collab`, {
+                const response = await fetch(`http://localhost:3000/api/users/${userId}/reset-collab`, {
                     method: 'PUT',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -950,7 +1029,7 @@ notesContainer.addEventListener('click', async (e) => {
     if (e.target.classList.contains('delete-bulletin-btn')) {
         if (await showCustomConfirm('Hapus Buletin', 'Yakin ingin menghapus buletin ini?')) {
             try {
-                const response = await fetch(`/api/bulletins/${e.target.getAttribute('data-id')}`, {
+                const response = await fetch(`http://localhost:3000/api/bulletins/${e.target.getAttribute('data-id')}`, {
                     method: 'DELETE',
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
@@ -1003,6 +1082,57 @@ function showCustomConfirm(title, text, requireInput = false) {
     });
 }
 
+document.addEventListener("DOMContentLoaded", async () => {
+    const userDataString = localStorage.getItem("user");
+    
+    if (!userDataString || !token) {
+        window.location.href = "login.html";
+        return;
+    }
+
+    const userData = JSON.parse(userDataString);
+    const userRole = userData.role;
+    const topbarName = document.getElementById("topbarName");
+
+    if (userRole === "admin") {
+        topbarName.innerText = `Admin ${userData.username}`;
+        
+        document.querySelectorAll('.role-user').forEach(el => {
+            el.style.setProperty('display', 'none', 'important'); 
+            el.classList.remove('d-md-block'); 
+        });
+
+        document.querySelectorAll('.role-admin').forEach(el => {
+            el.style.display = 'block';
+        });
+
+        currentView = 'admin_dashboard';
+        setActiveNav(navAdminDashboard);
+        renderAdminDashboard();
+
+    } 
+    else {
+        topbarName.innerText = userData.username;
+        
+        document.querySelectorAll('.role-admin').forEach(el => {
+            el.style.setProperty('display', 'none', 'important');
+        });
+
+        document.querySelectorAll('.role-user').forEach(el => {
+            el.style.display = ''; 
+        });
+
+        currentView = 'notes';
+        if (navNotes) setActiveNav(navNotes);
+        
+        await fetchFolders(); 
+        await fetchNotes();   
+        await fetchCollabs();
+        await fetchTags();
+        await fetchBulletinWidget();
+    }
+});
+
 const userAvatar = document.getElementById('userAvatar');
 const settingsModal = document.getElementById('settingsModal');
 const settingsForm = document.getElementById('settingsForm');
@@ -1023,54 +1153,61 @@ if (settingsForm) {
         e.preventDefault();
         const newUsername = document.getElementById('editUsername').value;
         const newEmail = document.getElementById('editEmail').value;
+        
         try {
             const response = await fetch('/api/users/profile', {
                 method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ id: user.id, username: newUsername, email: newEmail, password: document.getElementById('editPassword').value })
             });
             const result = await response.json();
+            
+            const avatarFile = document.getElementById('editAvatar').files[0];
+            let avatarUrlBaru = user.avatarUrl; 
+            
+            if (avatarFile && result.success) {
+                const avatarData = new FormData();
+                avatarData.append('avatar', avatarFile);
+                const avatarRes = await fetch('/api/users/profile/avatar', {
+                    method: 'PUT', headers: { 'Authorization': `Bearer ${token}` }, body: avatarData
+                });
+                const avatarResult = await avatarRes.json();
+                if(avatarResult.success) avatarUrlBaru = avatarResult.data.avatarUrl;
+            }
+
             if (result.success) {
                 showToast("Profil berhasil diperbarui!", "success");
-                
-                const updatedUser = { ...user, username: newUsername, email: newEmail };
+                const updatedUser = { ...user, username: newUsername, email: newEmail, avatarUrl: avatarUrlBaru };
                 localStorage.setItem('user', JSON.stringify(updatedUser));
                 
-                document.getElementById('topbarName').textContent = newUsername;
-                const initials = newUsername.charAt(0).toUpperCase();
-                document.getElementById('userAvatar').textContent = initials;
-
-                setTimeout(() => { 
-                    settingsModal.style.display = 'none';
-                }, 1500);
-            } else { 
-                showToast(result.message, "error"); 
-            }
-        } catch (error) { 
-            showToast("Terjadi kesalahan server saat update.", "error"); 
-        }
+                renderUserAvatarBaru(updatedUser);
+                setTimeout(() => { settingsModal.style.display = 'none'; }, 1000);
+            } else { showToast(result.message, "error"); }
+        } catch (error) { showToast("Terjadi kesalahan server saat update.", "error"); }
     });
 }
 
-document.getElementById('logoutSettingsBtn').addEventListener('click', async () => {
+const logoutBtn = document.getElementById('logoutSettingsBtn');
+if(logoutBtn) logoutBtn.addEventListener('click', async () => {
     settingsModal.style.display = 'none'; 
     if (await showCustomConfirm('Logout', 'Yakin ingin keluar dari sesi Memoora saat ini?')) {
         localStorage.clear(); 
-        window.location.href = 'login.html';
+        window.location.href = '/login';
     } else { 
         settingsModal.style.display = 'flex'; 
     }
 });
 
-document.getElementById('deleteAccountSettingsBtn').addEventListener('click', async () => {
+const delAccBtn = document.getElementById('deleteAccountSettingsBtn');
+if(delAccBtn) delAccBtn.addEventListener('click', async () => {
     settingsModal.style.display = 'none'; 
     if (await showCustomConfirm('Hapus Akun', 'Menghapus akun akan memusnahkan seluruh catatan dan folder Anda secara permanen. Lanjutkan?')) {
         if (await showCustomConfirm('Konfirmasi Akhir', 'Ketik kata HAPUS di bawah ini untuk memusnahkan akun:', true)) {
             try {
-                const response = await fetch(`/api/users/${user.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+                const response = await fetch(`http://localhost:3000/api/users/${user.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
                 const result = await response.json();
                 if (result.success) { 
                     showToast("Akun berhasil dimusnahkan. Selamat tinggal!", "success"); 
-                    setTimeout(() => { localStorage.clear(); window.location.href = 'login.html'; }, 1500); 
+                    setTimeout(() => { localStorage.clear(); window.location.href = '/login'; }, 1500); 
                 }
             } catch (error) { 
                 showToast("Gagal menghapus akun karena masalah server.", "error"); 
@@ -1083,24 +1220,10 @@ document.getElementById('deleteAccountSettingsBtn').addEventListener('click', as
     }
 });
 
-async function startApp() {
-    setActiveNav(navNotes)
-    await fetchFolders(); 
-    await fetchNotes();   
-    await fetchCollabs();
-    await fetchTags();
-}
-
 document.getElementById('menu-toggle').addEventListener('click', function(e) {
     e.preventDefault();
     document.getElementById('wrapper').classList.toggle('toggled');
 });
-
-const currentUser = JSON.parse(localStorage.getItem('user'));
-if (currentUser) {
-    const topbarNameEl = document.getElementById('topbarName');
-    if (topbarNameEl) topbarNameEl.textContent = currentUser.username;
-}
 
 const globalAddBtn = document.getElementById('addNoteBtn');
 if (globalAddBtn) {
@@ -1129,7 +1252,7 @@ if (globalAddBtn) {
             tagForm.reset();
             document.getElementById('tagModalTitle').textContent = "Buat Tag Baru";
             tagModal.style.display = 'flex';
-        } else if (currentView === 'admin') {
+        } else if (currentView === 'bulletin_management') {
             editingBulletinId = null;
             bulletinForm.reset();
             document.getElementById('bulletinModalTitle').textContent = "Buat Buletin Baru";
@@ -1138,4 +1261,58 @@ if (globalAddBtn) {
     });
 }
 
-startApp();
+const socket = io(); 
+
+socket.on('refresh_bulletin', () => {
+    if (user && user.role === 'admin' && currentView === 'bulletin_management') {
+        fetchAdminData(); 
+    } 
+    else if (user && user.role !== 'admin') {
+        fetchBulletinWidget();
+    }
+});
+
+const requestResetBtn = document.getElementById('requestResetBtn');
+if (requestResetBtn) {
+    requestResetBtn.addEventListener('click', async () => {
+        try {
+            const requestBtnOrigText = requestResetBtn.textContent;
+            requestResetBtn.textContent = "Mengirim...";
+            
+            const response = await fetch('/api/users/request-reset', { 
+                method: 'PUT', 
+                headers: { 'Authorization': `Bearer ${token}` } 
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                showToast(result.message, 'success');
+                document.getElementById('settingsModal').style.display = 'none';
+            } else {
+                showToast(result.message, 'error');
+            }
+            requestResetBtn.textContent = requestBtnOrigText;
+        } catch (error) {
+            showToast("Terjadi kesalahan server.", "error");
+        }
+    });
+}
+
+const mainWrapper = document.getElementById('wrapper');
+const contentArea = document.getElementById('page-content-wrapper');
+
+document.querySelectorAll('#sidebarNav .list-group-item').forEach(menuItem => {
+    menuItem.addEventListener('click', () => {
+        if (window.innerWidth < 768) {
+            mainWrapper.classList.remove('toggled');
+        }
+    });
+});
+
+contentArea.addEventListener('click', (e) => {
+    if (window.innerWidth < 768 && mainWrapper.classList.contains('toggled')) {
+        if (!e.target.closest('#menu-toggle')) {
+            mainWrapper.classList.remove('toggled');
+        }
+    }
+});
