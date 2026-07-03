@@ -460,7 +460,7 @@ function renderNotesTemplate(data) {
 
             let lampiranHtml = '';
             if (note.lampiran) {
-                lampiranHtml = `<a href="/${note.lampiran.replace(/\\/g, '/')}" target="_blank" class="badge bg-info text-dark text-decoration-none mt-2" style="font-size: 0.8rem; padding: 5px 10px;">📎 Lihat Lampiran</a>`;
+                lampiranHtml = `<a href="/${note.lampiran.replace(/\\/g, '/')}" target="_blank" class="badge bg-info text-dark text-decoration-none mt-2" style="font-size: 0.8rem; padding: 5px 10px;">Lihat Lampiran</a>`;
             }
 
             const noteCard = document.createElement('div');

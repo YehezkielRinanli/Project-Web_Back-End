@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 
-const JWT_SECRET = "RAHASIA_MEMOORA_2026"; 
+const JWT_SECRET = "process.env.JWT_SECRET"; 
 
 export const verifyToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
